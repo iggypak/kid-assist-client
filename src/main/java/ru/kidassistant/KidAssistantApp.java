@@ -39,6 +39,9 @@ public final class KidAssistantApp extends Application {
 
     private ConfigurableApplicationContext context;
     private AiClient aiClient;
+    private TrayService trayService;
+    private boolean trayAvailable;
+    private boolean stopping;
     private boolean serverOnline;
     private boolean waitingForAnswer;
     private int connectionCheckVersion;
@@ -61,10 +64,12 @@ public final class KidAssistantApp extends Application {
                 .headless(false)
                 .run(getParameters().getRaw().toArray(String[]::new));
         aiClient = context.getBean(AiClient.class);
+        trayService = context.getBean(TrayService.class);
     }
 
     @Override
     public void stop() {
+        stopping = true;
         ++connectionCheckVersion;
         if (context != null) {
             context.close();
@@ -78,6 +83,10 @@ public final class KidAssistantApp extends Application {
         stage.setAlwaysOnTop(true);
         stage.setResizable(false);
         stage.setTitle("Помощник");
+        stage.setOnCloseRequest(event -> {
+            event.consume();
+            closeOrHideWindow();
+        });
 
         Label title = new Label("Помощник");
         title.getStyleClass().add("title");
@@ -100,7 +109,7 @@ public final class KidAssistantApp extends Application {
         Button closeButton = new Button("×");
         closeButton.getStyleClass().add("icon-button");
         closeButton.setTooltip(new javafx.scene.control.Tooltip("Закрыть помощника"));
-        closeButton.setOnAction(event -> stage.close());
+        closeButton.setOnAction(event -> closeOrHideWindow());
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -167,7 +176,60 @@ public final class KidAssistantApp extends Application {
         stage.show();
         questionArea.requestFocus();
 
+        installTray(closeButton);
         checkConnection();
+    }
+
+    private void installTray(Button closeButton) {
+        trayService.install(this::showWindow, this::hideWindow, Platform::exit, () -> {
+            if (stopping) {
+                return;
+            }
+            trayAvailable = false;
+            showWindow();
+            Platform.setImplicitExit(true);
+            closeButton.getTooltip().setText("Закрыть помощника");
+            log.info("tray=unavailable");
+        }).whenCompleteAsync((installed, error) -> {
+            if (stopping) {
+                return;
+            }
+            trayAvailable = error == null && Boolean.TRUE.equals(installed);
+            Platform.setImplicitExit(!trayAvailable);
+            closeButton.getTooltip().setText(trayAvailable ? "Скрыть в трей" : "Закрыть помощника");
+            if (error == null) {
+                log.info(trayAvailable ? "tray=enabled" : "tray=unavailable");
+            } else {
+                log.info("tray=unavailable error_type=" + unwrap(error).getClass().getSimpleName());
+            }
+        }, Platform::runLater);
+    }
+
+    private void closeOrHideWindow() {
+        if (trayAvailable) {
+            hideWindow();
+        } else {
+            Platform.exit();
+        }
+    }
+
+    private void hideWindow() {
+        if (trayAvailable) {
+            stage.hide();
+        }
+    }
+
+    private void showWindow() {
+        if (stopping) {
+            return;
+        }
+        stage.show();
+        stage.setIconified(false);
+        stage.toFront();
+        stage.requestFocus();
+        if (!waitingForAnswer) {
+            questionArea.requestFocus();
+        }
     }
 
     private void checkConnection() {
@@ -232,7 +294,9 @@ public final class KidAssistantApp extends Application {
                         + " duration_ms=" + durationMs);
             }
             refreshControls();
-            questionArea.requestFocus();
+            if (stage.isShowing()) {
+                questionArea.requestFocus();
+            }
         }));
     }
 

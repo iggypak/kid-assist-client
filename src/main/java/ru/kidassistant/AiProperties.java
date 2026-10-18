@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
 import java.time.Duration;
 
 @ConfigurationProperties(prefix = "ai")
@@ -37,7 +38,7 @@ public record AiProperties(@DefaultValue("YANDEX") Provider provider, Ollama oll
     }
 
     public record Yandex(URI baseUrl, String token, String projectId, String model,
-                         String instructions, Double temperature, int maxOutputTokens,
+                         Path systemPromptPath, Double temperature, int maxOutputTokens,
                          String truncation, boolean store, @DefaultValue("5m") Duration requestTimeout) {
 
         public void validate() {
@@ -54,8 +55,9 @@ public record AiProperties(@DefaultValue("YANDEX") Provider provider, Ollama oll
             if (projectId == null || projectId.isBlank() || projectId.contains("\r") || projectId.contains("\n")) {
                 throw new IllegalArgumentException("Укажите ai.yandex.project-id");
             }
-            if (model == null || model.isBlank() || instructions == null || instructions.isBlank()) {
-                throw new IllegalArgumentException("Укажите ai.yandex.model и ai.yandex.instructions");
+            if (model == null || model.isBlank() || systemPromptPath == null
+                    || systemPromptPath.toString().isBlank()) {
+                throw new IllegalArgumentException("Укажите ai.yandex.model и ai.yandex.system-prompt-path");
             }
             if (temperature != null && (!Double.isFinite(temperature) || temperature < 0 || temperature > 2)) {
                 throw new IllegalArgumentException("ai.yandex.temperature должен быть от 0 до 2");
