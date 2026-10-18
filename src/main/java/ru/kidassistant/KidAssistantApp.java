@@ -21,10 +21,12 @@ import javafx.scene.shape.Circle;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import org.springframework.boot.WebApplicationType;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.context.ConfigurableApplicationContext;
 
 import java.net.ConnectException;
 import java.net.http.HttpTimeoutException;
-import java.nio.file.Path;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -34,9 +36,9 @@ public final class KidAssistantApp extends Application {
     private static final double WINDOW_HEIGHT = 390;
 
     private final Logger log = ClientLogging.create();
-    private final Path configPath = AppConfig.defaultPath();
 
-    private OllamaClient ollama;
+    private ConfigurableApplicationContext context;
+    private AiClient aiClient;
     private boolean serverOnline;
     private boolean waitingForAnswer;
     private int connectionCheckVersion;
@@ -51,6 +53,23 @@ public final class KidAssistantApp extends Application {
     private Button retryButton;
     private double dragOffsetX;
     private double dragOffsetY;
+
+    @Override
+    public void init() {
+        context = new SpringApplicationBuilder(SpringConfiguration.class)
+                .web(WebApplicationType.NONE)
+                .headless(false)
+                .run(getParameters().getRaw().toArray(String[]::new));
+        aiClient = context.getBean(AiClient.class);
+    }
+
+    @Override
+    public void stop() {
+        ++connectionCheckVersion;
+        if (context != null) {
+            context.close();
+        }
+    }
 
     @Override
     public void start(Stage mainStage) {
@@ -75,8 +94,8 @@ public final class KidAssistantApp extends Application {
 
         retryButton = new Button("↻");
         retryButton.getStyleClass().add("icon-button");
-        retryButton.setTooltip(new javafx.scene.control.Tooltip("Повторить подключение / перечитать настройки"));
-        retryButton.setOnAction(event -> reloadConfiguration());
+        retryButton.setTooltip(new javafx.scene.control.Tooltip("Повторить проверку связи"));
+        retryButton.setOnAction(event -> checkConnection());
 
         Button closeButton = new Button("×");
         closeButton.getStyleClass().add("icon-button");
@@ -148,48 +167,36 @@ public final class KidAssistantApp extends Application {
         stage.show();
         questionArea.requestFocus();
 
-        reloadConfiguration();
+        checkConnection();
     }
 
-    private void reloadConfiguration() {
+    private void checkConnection() {
         if (waitingForAnswer) {
             return;
         }
         int generation = ++connectionCheckVersion;
         serverOnline = false;
         refreshControls();
-        try {
-            AppConfig config = AppConfig.load(configPath);
-            ollama = new OllamaClient(config);
-            setStatus("Проверка связи…", Color.LIGHTGRAY);
-            ollama.isServerAvailable().whenComplete((available, error) -> Platform.runLater(() -> {
-                if (generation != connectionCheckVersion || waitingForAnswer) {
-                    return;
-                }
-                serverOnline = error == null && Boolean.TRUE.equals(available);
-                if (serverOnline) {
-                    setStatus("На связи", Color.LIGHTGREEN);
-                    log.info("connection_check=ok");
-                } else {
-                    setStatus("Нет связи", Color.SALMON);
-                    log.info("connection_check=failed");
-                    answerLabel.setText("Не удалось связаться с Ollama. Проверь адрес сервера, сеть и порт 11434. Затем нажми ↻.");
-                }
-                refreshControls();
-            }));
-        } catch (Exception exception) {
-            ollama = null;
-            serverOnline = false;
-            setStatus("Нет настроек", Color.SALMON);
-            answerLabel.setText("Нужен файл настроек:\n" + configPath
-                    + "\n\nУкажи в нём serverUrl и model. Затем нажми ↻.");
-            log.info("configuration=invalid (" + exception.getClass().getSimpleName() + ")");
+        setStatus("Проверка связи…", Color.LIGHTGRAY);
+        aiClient.isServerAvailable().whenComplete((available, error) -> Platform.runLater(() -> {
+            if (generation != connectionCheckVersion || waitingForAnswer) {
+                return;
+            }
+            serverOnline = error == null && Boolean.TRUE.equals(available);
+            if (serverOnline) {
+                setStatus("На связи", Color.LIGHTGREEN);
+                log.info("connection_check=ok");
+            } else {
+                setStatus("Нет связи", Color.SALMON);
+                log.info("connection_check=failed");
+                answerLabel.setText("Не удалось связаться с Ollama. Проверь адрес сервера, сеть и порт 11434. Затем нажми ↻.");
+            }
             refreshControls();
-        }
+        }));
     }
 
     private void sendQuestion() {
-        if (waitingForAnswer || !serverOnline || ollama == null) {
+        if (waitingForAnswer || !serverOnline || aiClient == null) {
             return;
         }
         String question = questionArea.getText().trim();
@@ -209,7 +216,7 @@ public final class KidAssistantApp extends Application {
         long started = System.nanoTime();
 
         // Never store any conversation history: only this question is sent.
-        ollama.ask(question).whenComplete((answer, error) -> Platform.runLater(() -> {
+        aiClient.ask(question).whenComplete((answer, error) -> Platform.runLater(() -> {
             long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
             waitingForAnswer = false;
             if (error == null) {

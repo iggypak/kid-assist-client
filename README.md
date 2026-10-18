@@ -1,6 +1,6 @@
 # Kid Assistant Client — MVP
 
-A translucent, always-on-top JavaFX assistant for a Linux laptop, backed by an Ollama instance on another computer. Java 21; no Spring Boot process. This version **never executes commands** on the child's laptop. It only displays the model's text answer.
+A translucent, always-on-top JavaFX assistant for a Linux laptop, backed by an Ollama instance on another computer. Java 21; Spring Boot provides dependency injection and configuration in the JavaFX process, without a web server. This version **never executes commands** on the child's laptop. It only displays the model's text answer.
 
 ## What it does
 
@@ -41,31 +41,46 @@ The result should be JSON with a `models` array. If not, fix network access firs
 
 ## 3. Configure the client
 
-From the extracted repository directory:
+The bundled `src/main/resources/application.yml` defines these settings:
+
+```yaml
+ai:
+  ollama:
+    base-url: ${OLLAMA_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:child-helper:latest}
+  cloud:
+    base-url: ${CLOUD_AI_URL:}
+    token: ${CLOUD_AI_TOKEN:}
+```
+
+Set the Ollama address and your custom model's exact name before launch:
 
 ```bash
-mkdir -p ~/.config/kid-assistant
-cp config.example.properties ~/.config/kid-assistant/config.properties
-nano ~/.config/kid-assistant/config.properties
+export OLLAMA_URL=http://192.168.1.10:11434
+export OLLAMA_MODEL=child-helper:latest
 ```
 
-Example contents (replace BOTH values):
+`ai.ollama.base-url` is the base address, **not** `/api/chat`. A custom model is not automatically available to other names. An invalid Ollama URL or an empty model prevents startup.
 
-```properties
-serverUrl=http://192.168.1.10:11434
-model=child-helper:latest
+To override settings in a local file, run these commands from the repository directory:
+
+```bash
+mkdir -p config
+cp src/main/resources/application.yml config/application.yml
+nano config/application.yml
 ```
 
-`serverUrl` is the base address, **not** `/api/chat`. A custom model is not automatically available to other names.
+Spring Boot loads `config/application.yml` from the working directory and uses it to override the bundled settings. This local file is ignored by Git. The old `~/.config/kid-assistant/config.properties` file is no longer read.
+
+For future cloud requests, set `CLOUD_AI_URL` and `CLOUD_AI_TOKEN` in the launch environment. Keep the real token out of tracked files. These cloud settings are available through `AiProperties`; cloud requests and authentication are not implemented yet. The application currently uses Ollama and can start with empty cloud settings.
 
 ## 4. Launch
 
 ```bash
-mvn clean test
 mvn javafx:run
 ```
 
-The initial Maven run needs internet access to download dependencies. After changing `config.properties`, click `↻` in the app (or restart it).
+The initial Maven run needs internet access to download dependencies. Restart the app after changing configuration or environment variables. The `↻` button only repeats the connection check.
 
 - Enter submits a question; Shift+Enter adds a newline.
 - While waiting, a progress spinner and `Думаю…` appear; long CPU inference can take minutes.
