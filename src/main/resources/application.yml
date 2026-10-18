@@ -12,7 +12,7 @@ ai:
   yandex:
     base-url: ${YANDEX_URL:https://ai.api.cloud.yandex.net/v1/}
     token: ${YANDEX_API_KEY:}
-    project-id: ${YANDEX_PROJECT_ID:b1gq9s1g7s9r9b0ntksj}
+    project-id: ${YANDEX_PROJECT_ID:}
     model: ${YANDEX_MODEL:gpt://${ai.yandex.project-id}/deepseek-v4-flash/latest}
     temperature: 0.3
     max-output-tokens: 65536
