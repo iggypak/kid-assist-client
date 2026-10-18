@@ -12,14 +12,17 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.StringJoiner;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 public final class YandexAiClient implements AiClient {
     private final AiProperties.Yandex config;
     private final HttpClient httpClient;
     private final ObjectMapper mapper;
+    private final Supplier<String> systemPrompt;
     private final URI baseUrl;
 
-    public YandexAiClient(AiProperties.Yandex config, HttpClient httpClient, ObjectMapper mapper) {
+    public YandexAiClient(AiProperties.Yandex config, HttpClient httpClient, ObjectMapper mapper,
+                          Supplier<String> systemPrompt) {
         if (config == null) {
             throw new IllegalArgumentException("Укажите настройки ai.yandex");
         }
@@ -27,6 +30,7 @@ public final class YandexAiClient implements AiClient {
         this.config = config;
         this.httpClient = httpClient;
         this.mapper = mapper;
+        this.systemPrompt = systemPrompt;
         String address = config.baseUrl().toString();
         this.baseUrl = URI.create(address.endsWith("/") ? address : address + "/");
     }
@@ -47,7 +51,7 @@ public final class YandexAiClient implements AiClient {
         final String body;
         try {
             body = mapper.writeValueAsString(new YandexResponsesRequest(
-                    config.model(), config.instructions(), question, config.temperature(),
+                    config.model(), systemPrompt.get(), question, config.temperature(),
                     config.maxOutputTokens(), config.truncation(), config.store(), false));
         } catch (JsonProcessingException exception) {
             return CompletableFuture.failedFuture(exception);
