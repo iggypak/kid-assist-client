@@ -23,7 +23,10 @@ public class SpringConfiguration {
     }
 
     @Bean
-    OllamaClient ollamaClient(AiProperties properties, HttpClient httpClient, ObjectMapper mapper) {
-        return new OllamaClient(properties.ollama(), httpClient, mapper);
+    AiClient aiClient(AiProperties properties, HttpClient httpClient, ObjectMapper mapper) {
+        return switch (properties.provider()) {
+            case OLLAMA -> new OllamaClient(properties.ollama(), httpClient, mapper);
+            case YANDEX -> new YandexAiClient(properties.yandex(), httpClient, mapper);
+        };
     }
 }

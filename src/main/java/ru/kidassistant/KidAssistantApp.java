@@ -189,7 +189,7 @@ public final class KidAssistantApp extends Application {
             } else {
                 setStatus("Нет связи", Color.SALMON);
                 log.info("connection_check=failed");
-                answerLabel.setText("Не удалось связаться с Ollama. Проверь адрес сервера, сеть и порт 11434. Затем нажми ↻.");
+                answerLabel.setText("Не удалось связаться с ИИ-сервисом. Проверь сеть и настройки доступа. Затем нажми ↻.");
             }
             refreshControls();
         }));
@@ -246,7 +246,7 @@ public final class KidAssistantApp extends Application {
 
     private static String humanReadableError(Throwable error) {
         if (error instanceof ConnectException) {
-            return "Сервер недоступен. Проверь, включён ли компьютер с Ollama, и нажми ↻.";
+            return "ИИ-сервис недоступен. Проверь подключение к сети и нажми ↻.";
         }
         if (error instanceof HttpTimeoutException) {
             return "Сервер слишком долго отвечает. Попробуй задать вопрос ещё раз.";

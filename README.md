@@ -1,15 +1,15 @@
 # Kid Assistant Client — MVP
 
-A translucent, always-on-top JavaFX assistant for a Linux laptop, backed by an Ollama instance on another computer. Java 21; Spring Boot provides dependency injection and configuration in the JavaFX process, without a web server. This version **never executes commands** on the child's laptop. It only displays the model's text answer.
+A translucent, always-on-top JavaFX assistant for a Linux laptop, backed by Yandex AI Studio or an Ollama instance. Java 21; Spring Boot provides dependency injection and configuration in the JavaFX process, without a web server. This version **never executes commands** on the child's laptop. It only displays the model's text answer.
 
 ## What it does
 
 - Small translucent window near the lower-right corner, draggable by its header.
-- Asks a single question via `POST /api/chat`, with one `user` message and `stream: false`.
+- Asks a single question via the selected provider: Yandex Responses API (`POST /v1/responses`) or Ollama (`POST /api/chat`). Both clients use `stream: false`.
 - No question/answer history is sent or shown. A new answer replaces the previous one.
 - Shows connection status and a progress indicator while waiting for the model.
 - Logs response status and duration, **not the child's questions or model answers**.
-- Keeps the system instructions you already embedded in the Ollama model: the client **does not** send an additional system prompt. The configured model name must be the one carrying your Modelfile rules.
+- Yandex receives the child-assistant instructions from configuration with every question. Ollama uses the instructions embedded in your custom model and receives no additional system prompt.
 
 ## 1. Prerequisites on the child's Ubuntu computer
 
@@ -20,7 +20,7 @@ java -version
 mvn -version
 ```
 
-## 2. Check the Ollama server
+## 2. Check the Ollama server (when using Ollama)
 
 On the computer running Ollama:
 
@@ -41,21 +41,36 @@ The result should be JSON with a `models` array. If not, fix network access firs
 
 ## 3. Configure the client
 
-The bundled `src/main/resources/application.yml` defines these settings:
+The bundled `src/main/resources/application.yml` selects Yandex AI Studio by default:
 
 ```yaml
 ai:
+  provider: ${AI_PROVIDER:yandex}
   ollama:
     base-url: ${OLLAMA_URL:http://localhost:11434}
     model: ${OLLAMA_MODEL:child-helper:latest}
-  cloud:
-    base-url: ${CLOUD_AI_URL:}
-    token: ${CLOUD_AI_TOKEN:}
+  yandex:
+    base-url: ${YANDEX_URL:https://ai.api.cloud.yandex.net/v1/}
+    token: ${YANDEX_API_KEY:}
+    project-id: ${YANDEX_PROJECT_ID:b1gq9s1g7s9r9b0ntksj}
+    model: ${YANDEX_MODEL:gpt://${ai.yandex.project-id}/deepseek-v4-flash/latest}
+    temperature: 0.3
+    max-output-tokens: 65536
+    truncation: disabled
+    store: true
+    request-timeout: 5m
 ```
 
-Set the Ollama address and your custom model's exact name before launch:
+The full child-assistant prompt from your request is stored in `ai.yandex.instructions` in the bundled file. `input` is filled with the current question. The Yandex request uses the `Authorization: Api-Key` and `OpenAI-Project` headers. The API key is required only when `ai.provider` is `yandex`; set it in `YANDEX_API_KEY` in your terminal or IDE run configuration.
+
+`ai.yandex.base-url` includes `/v1/` and excludes `/responses`. When changing the project, the default model URI uses the new project ID automatically; `YANDEX_MODEL` can override the full URI. The timeout and generation parameters can be changed in YAML. Set `temperature` to `null` to omit it for a model that does not support this parameter.
+
+`store: true` matches the supplied request and enables storage of responses by Yandex. Set it to `false` to disable Responses API storage. The app sends only the current question and does not use `previous_response_id` or a conversation ID.
+
+To use Ollama, select the provider and set your custom model's exact name before launch:
 
 ```bash
+export AI_PROVIDER=ollama
 export OLLAMA_URL=http://192.168.1.10:11434
 export OLLAMA_MODEL=child-helper:latest
 ```
@@ -72,7 +87,9 @@ nano config/application.yml
 
 Spring Boot loads `config/application.yml` from the working directory and uses it to override the bundled settings. This local file is ignored by Git. The old `~/.config/kid-assistant/config.properties` file is no longer read.
 
-For future cloud requests, set `CLOUD_AI_URL` and `CLOUD_AI_TOKEN` in the launch environment. Keep the real token out of tracked files. These cloud settings are available through `AiProperties`; cloud requests and authentication are not implemented yet. The application currently uses Ollama and can start with empty cloud settings.
+Keep the real API key out of tracked files. Spring creates one `AiClient` bean based on `ai.provider`; unknown provider values prevent startup. Requests use separate DTOs for Ollama's `messages/options` and Yandex's `input/instructions/max_output_tokens` formats.
+
+Yandex connection checks use `GET /v1/models` without generating text. Listing models requires the additional `yc.ai.models.viewer` API-key scope. A `403` response to this check is treated as a reachable service so that a key with generation permissions only can still send questions. Actual generation errors are reported when sending a question. See the official [Responses API example](https://aistudio.yandex.ru/ru/docs/ai-studio/operations/generation/create-prompt) and [Models API permissions](https://aistudio.yandex.ru/ru/docs/ai-studio/operations/models/get).
 
 ## 4. Launch
 
@@ -94,7 +111,7 @@ The initial Maven run needs internet access to download dependencies. Restart th
 ## Limitations / next step
 
 - It launches from Maven; a packaged `.deb` or native launcher and autostart can be added later.
-- Initial connection state checks only the Ollama API. Model existence is validated only by the actual request.
+- Initial connection checks do not generate text. Model availability and generation permissions are validated by the actual question request.
 - It is a non-streaming request, so the status reads `Думаю…` until the complete answer arrives.
 - On some Linux Wayland compositors, always-on-top or window positioning may not be honored; test on the child's desktop session.
 - Do not expose Ollama's unauthenticated HTTP port to the public internet. A local firewall or VPN is appropriate for remote access.
