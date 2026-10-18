@@ -3,6 +3,7 @@ package ru.kidassistant;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ru.kidassistant.dto.OllamaRequest;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,7 +11,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public final class OllamaClient implements AiClient {
@@ -43,15 +43,10 @@ public final class OllamaClient implements AiClient {
     public CompletableFuture<String> ask(String question) {
         final String body;
         try {
-            body = mapper.writeValueAsString(Map.of(
-                    "model", model,
-                    "stream", false,
-                    "think", false,
-                    "messages", List.of(Map.of("role", "user", "content", question)),
-                    "options", Map.of(
-                            "num_predict", MAX_OUTPUT_TOKENS,
-                            "num_ctx", 2048
-                    )
+            body = mapper.writeValueAsString(new OllamaRequest(
+                    model, false, false,
+                    List.of(new OllamaRequest.Message("user", question)),
+                    new OllamaRequest.Options(MAX_OUTPUT_TOKENS, 2048)
             ));
         } catch (JsonProcessingException exception) {
             return CompletableFuture.failedFuture(exception);
