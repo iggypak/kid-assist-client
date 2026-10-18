@@ -244,7 +244,7 @@ public final class KidAssistantApp extends Application {
         if (error instanceof HttpTimeoutException) {
             return "Сервер слишком долго отвечает. Попробуй задать вопрос ещё раз.";
         }
-        if (error instanceof OllamaClient.OllamaException) {
+        if (error instanceof AiNotReachableException) {
             return "Не удалось получить ответ: " + error.getMessage();
         }
         return "Не удалось получить ответ. Проверь соединение с сервером и попробуй ещё раз.";
