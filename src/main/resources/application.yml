@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: kid-assistant
+  main:
+    web-application-type: none
+
+ai:
+  ollama:
+    base-url: ${OLLAMA_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:child-helper:latest}
+  cloud:
+    base-url: ${CLOUD_AI_URL:}
+    token: ${CLOUD_AI_TOKEN:}

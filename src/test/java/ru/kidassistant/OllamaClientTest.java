@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class OllamaClientTest {
     private HttpServer server;
+    private final HttpClient httpClient = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
     private final AtomicReference<String> received = new AtomicReference<>();
 
@@ -42,13 +44,15 @@ class OllamaClientTest {
 
     @AfterEach
     void stopServer() {
+        httpClient.shutdownNow();
         server.stop(0);
     }
 
     @Test
     void sendsExactlyOneQuestionWithoutContextHistory() throws Exception {
         URI address = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
-        OllamaClient client = new OllamaClient(new AppConfig(address, "child-helper:latest"));
+        OllamaClient client = new OllamaClient(
+                new AiProperties.Ollama(address, "child-helper:latest"), httpClient, mapper);
         assertTrue(client.isServerAvailable().get(5, TimeUnit.SECONDS));
         assertEquals("Открой меню приложений.", client.ask("Как открыть Firefox?").get(5, TimeUnit.SECONDS));
 
